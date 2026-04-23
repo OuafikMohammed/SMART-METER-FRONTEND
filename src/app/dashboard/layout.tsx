@@ -7,7 +7,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { Loader2 } from "lucide-react";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function ResidentLayout({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated } = useAuth();
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -17,8 +17,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // Basic route protection
     if (!isAuthenticated) {
       router.push("/auth/login");
-    } else if (user && user.role !== 'ADMIN') {
-      router.push("/dashboard");
+    } else if (user && user.role !== 'RESIDENT') {
+      router.push("/admin");
     } else {
       setIsChecking(false);
     }
@@ -37,7 +37,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
 
       <div className="flex-1 flex flex-col relative overflow-hidden">
-        <Header isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} />
+        <Header isSidebarOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
 
         <main className="flex-1 overflow-y-auto p-8 relative">
            {children}
@@ -46,4 +46,3 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     </div>
   );
 }
-

@@ -11,7 +11,11 @@ import PremiumButton from "@/components/ui/PremiumButton";
 import { ArrowRight, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 
+import { useAuth } from "@/context/AuthContext";
+
 export default function Home() {
+  const { isAuthenticated, logout, user } = useAuth();
+
   return (
     <div className="flex flex-col min-h-screen bg-brand-dark text-slate-200 overflow-x-hidden">
       {/* Navbar */}
@@ -31,17 +35,32 @@ export default function Home() {
           </div>
 
           <div className="flex gap-4">
-            <Link href="/auth/login">
-              <PremiumButton variant="ghost" size="md">
-                Log In
-              </PremiumButton>
-            </Link>
-            <Link href="/auth/signup">
-              <PremiumButton size="md">
-                Get Started
-                <ArrowRight className="w-4 h-4" />
-              </PremiumButton>
-            </Link>
+            {isAuthenticated ? (
+              <>
+                <Link href={user?.role === 'ADMIN' ? "/admin" : "/dashboard"}>
+                  <PremiumButton variant="ghost" size="md">
+                    Dashboard
+                  </PremiumButton>
+                </Link>
+                <PremiumButton size="md" onClick={logout}>
+                  Sign Out
+                </PremiumButton>
+              </>
+            ) : (
+              <>
+                <Link href="/auth/login">
+                  <PremiumButton variant="ghost" size="md">
+                    Log In
+                  </PremiumButton>
+                </Link>
+                <Link href="/auth/signup">
+                  <PremiumButton size="md">
+                    Get Started
+                    <ArrowRight className="w-4 h-4" />
+                  </PremiumButton>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>

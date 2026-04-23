@@ -4,7 +4,9 @@ import React, { useRef, useEffect } from "react";
 import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import PremiumButton from "@/components/ui/PremiumButton";
 import LaserFlow from "@/components/react-bits/LaserFlow/LaserFlow";
-import { ArrowRight, Zap, Shield, BarChart3 } from "lucide-react";
+import AuthModal from "@/components/auth/AuthModal";
+import { ArrowRight, Zap, Shield, BarChart3, LogIn } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
@@ -13,6 +15,15 @@ gsap.registerPlugin(ScrollTrigger);
 const HeroSection = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const dashboardRef = useRef<HTMLDivElement>(null);
+  const { isAuthenticated, logout, user } = useAuth();
+  
+  const [isAuthModalOpen, setIsAuthModalOpen] = React.useState(false);
+  const [authMode, setAuthMode] = React.useState<"login" | "signup">("signup");
+
+  const openAuth = (mode: "login" | "signup") => {
+    setAuthMode(mode);
+    setIsAuthModalOpen(true);
+  };
   
   const { scrollYProgress } = useScroll({
     target: containerRef,
@@ -102,14 +113,45 @@ const HeroSection = () => {
             transition={{ delay: 0.5 }}
             className="flex flex-wrap gap-4"
           >
-            <PremiumButton size="xl">
-              Commencer
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </PremiumButton>
-            <PremiumButton variant="outline" size="xl">
-              Voir la démo
-            </PremiumButton>
+            {isAuthenticated ? (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-3 glass-dark px-4 py-2 rounded-full border border-brand-cyan/20">
+                  <div className="w-8 h-8 rounded-full bg-brand-cyan/20 flex items-center justify-center text-brand-cyan font-bold">
+                    {user?.username[0].toUpperCase()}
+                  </div>
+                  <span className="text-white font-medium">{user?.fullName || user?.username}</span>
+                </div>
+                <div className="flex gap-4">
+                  <PremiumButton size="xl" onClick={() => window.location.href = user?.role === 'ADMIN' ? '/admin/dashboard' : '/dashboard'}>
+                    Accéder au Dashboard
+                  </PremiumButton>
+                  <button 
+                    onClick={logout}
+                    className="text-slate-400 hover:text-white transition-colors text-sm font-bold uppercase tracking-widest px-4"
+                  >
+                    Déconnexion
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <PremiumButton size="xl" onClick={() => openAuth("signup")}>
+                  Commencer
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </PremiumButton>
+                <PremiumButton variant="outline" size="xl" onClick={() => openAuth("login")}>
+                  <LogIn className="w-5 h-5 mr-2" />
+                  Se connecter
+                </PremiumButton>
+              </>
+            )}
           </motion.div>
+
+          <AuthModal 
+            isOpen={isAuthModalOpen} 
+            onClose={() => setIsAuthModalOpen(false)} 
+            initialMode={authMode} 
+          />
         </motion.div>
 
         {/* Right Side: Live Metrics Widget */}

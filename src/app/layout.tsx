@@ -23,6 +23,7 @@ export const metadata: Metadata = {
 };
 
 import CursorGlow from "@/components/ui/CursorGlow";
+import { AuthProvider } from "@/context/AuthContext";
 
 export default function RootLayout({
   children,
@@ -35,8 +36,10 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${dmSans.variable} ${jetbrainsMono.variable} dark antialiased`}
     >
       <body className="min-h-screen bg-[#0A0E1A] text-slate-200 font-sans">
-        <CursorGlow />
-        {children}
+        <AuthProvider>
+          <CursorGlow />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
