@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-cyan: #00D4FF;
+  --color-brand-violet: #8B5CF6;
+  --color-brand-magenta: #FF79C6;
+  --color-brand-dark: #0A0E1A;
+  --color-brand-card: #141829;
+  --color-brand-border: #2A3352;
+  
+  --font-sans: var(--font-dm-sans);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-display: var(--font-space-grotesk);
+
+  --animate-radial-shift: radial-shift 15s ease-in-out infinite alternate;
+  --animate-border-spin: border-spin 4s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  
+  @keyframes radial-shift {
+    0% { background-position: 0% 50%; opacity: 0.3; }
+    50% { background-position: 100% 50%; opacity: 0.5; }
+    100% { background-position: 0% 50%; opacity: 0.3; }
+  }
+  
+  @keyframes border-spin {
+    100% { transform: rotate(360deg); }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
+  }
+  .glass-dark {
+    @apply bg-black/40 backdrop-blur-2xl border border-white/5 shadow-2xl;
+  }
+  .text-glow {
+    text-shadow: 0 0 10px rgba(0, 212, 255, 0.5), 0 0 20px rgba(0, 212, 255, 0.3);
+  }
+  .text-glow-purple {
+    text-shadow: 0 0 10px rgba(139, 92, 246, 0.5), 0 0 20px rgba(139, 92, 246, 0.3);
+  }
+}
+
+:root {
+  --background: #0A0E1A;
+  --foreground: #f1f5f9;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar for premium feel */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0A0E1A;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
