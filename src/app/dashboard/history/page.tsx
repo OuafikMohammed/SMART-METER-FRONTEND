@@ -1,27 +1,83 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import GlassCard from "@/components/ui/GlassCard";
-import { Calendar, Download, TrendingUp, Clock } from "lucide-react";
+import { Calendar, Download, TrendingUp, Clock, AlertCircle } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+
+interface HistoryItem {
+  date: string;
+  consumption: number;
+  cost: number;
+  peak: string;
+}
+
+interface PeriodStats {
+  avg: number;
+  total: number;
+  peak: string;
+  saving: string;
+}
 
 export default function ConsumptionHistory() {
+  const { token } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState("month");
+  const [historyData, setHistoryData] = useState<HistoryItem[]>([]);
+  const [periodStats, setPeriodStats] = useState<Record<string, PeriodStats>>({
+    week: { avg: 0, total: 0, peak: "", saving: "0%" },
+    month: { avg: 0, total: 0, peak: "", saving: "0%" },
+    year: { avg: 0, total: 0, peak: "", saving: "0%" },
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const historyData = [
-    { date: "May 7, 2026", consumption: 45.2, cost: 135.6, peak: "19h-21h" },
-    { date: "May 6, 2026", consumption: 38.5, cost: 115.5, peak: "20h-22h" },
-    { date: "May 5, 2026", consumption: 52.1, cost: 156.3, peak: "18h-20h" },
-    { date: "May 4, 2026", consumption: 41.3, cost: 123.9, peak: "19h-21h" },
-    { date: "May 3, 2026", consumption: 48.7, cost: 146.1, peak: "21h-23h" },
-    { date: "May 2, 2026", consumption: 44.2, cost: 132.6, peak: "19h-21h" },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-  const periodStats = {
-    week: { avg: 45.3, total: 316.9, peak: "20h-22h", saving: "12%" },
-    month: { avg: 45.3, total: 1357, peak: "20h-22h", saving: "18%" },
-    year: { avg: 42.8, total: 15641, peak: "19h-21h", saving: "25%" },
-  };
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        };
+
+        // Fetch history data
+        const historyRes = await fetch(`${baseUrl}/api/energy/consommations/consumption_history/?period=${selectedPeriod}`, {
+          headers,
+        });
+
+        if (!historyRes.ok) throw new Error('Erreur lors du chargement de l\'historique');
+        const historyDataRes = await historyRes.json();
+        setHistoryData(historyDataRes.results || historyDataRes);
+
+        // Fetch period stats
+        const statsRes = await fetch(`${baseUrl}/api/energy/consommations/consumption_stats/?period=${selectedPeriod}`, {
+          headers,
+        });
+
+        if (!statsRes.ok) throw new Error('Erreur lors du chargement des statistiques');
+        const statsData = await statsRes.json();
+        
+        setPeriodStats(prev => ({
+          ...prev,
+          [selectedPeriod]: statsData || prev[selectedPeriod]
+        }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Erreur inconnue';
+        setError(message);
+        console.error('Erreur fetch history:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (token) {
+      fetchData();
+    }
+  }, [selectedPeriod, token]);
 
   const stats = periodStats[selectedPeriod as keyof typeof periodStats];
 
@@ -133,35 +189,54 @@ export default function ConsumptionHistory() {
           </button>
         </div>
 
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-white/10">
-              <th className="text-left py-4 px-4 text-slate-400 text-sm font-bold">Date</th>
-              <th className="text-left py-4 px-4 text-slate-400 text-sm font-bold">Consommation</th>
-              <th className="text-left py-4 px-4 text-slate-400 text-sm font-bold">Coût Estimé</th>
-              <th className="text-left py-4 px-4 text-slate-400 text-sm font-bold">Heures de Pointe</th>
-            </tr>
-          </thead>
-          <tbody>
-            {historyData.map((item, idx) => (
-              <motion.tr
-                key={idx}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className="border-b border-white/5 hover:bg-white/5 transition-colors"
-              >
-                <td className="py-4 px-4 text-white font-medium flex items-center gap-2">
-                  <Calendar size={16} className="text-slate-500" />
-                  {item.date}
-                </td>
-                <td className="py-4 px-4 text-white font-medium">{item.consumption} kWh</td>
-                <td className="py-4 px-4 text-white font-medium">{item.cost} DH</td>
-                <td className="py-4 px-4 text-slate-400 text-sm">{item.peak}</td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
+        {loading ? (
+          <div className="flex justify-center items-center h-40">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-cyan"></div>
+          </div>
+        ) : error ? (
+          <div className="flex items-center gap-2 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
+            <AlertCircle className="text-red-400" size={20} />
+            <span className="text-red-400 text-sm">{error}</span>
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-white/10">
+                <th className="text-left py-4 px-4 text-slate-400 text-sm font-bold">Date</th>
+                <th className="text-left py-4 px-4 text-slate-400 text-sm font-bold">Consommation</th>
+                <th className="text-left py-4 px-4 text-slate-400 text-sm font-bold">Coût Estimé</th>
+                <th className="text-left py-4 px-4 text-slate-400 text-sm font-bold">Heures de Pointe</th>
+              </tr>
+            </thead>
+            <tbody>
+              {historyData.length > 0 ? (
+                historyData.map((item, idx) => (
+                  <motion.tr
+                    key={idx}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                  >
+                    <td className="py-4 px-4 text-white font-medium flex items-center gap-2">
+                      <Calendar size={16} className="text-slate-500" />
+                      {item.date}
+                    </td>
+                    <td className="py-4 px-4 text-white font-medium">{item.consumption} kWh</td>
+                    <td className="py-4 px-4 text-white font-medium">{item.cost} DH</td>
+                    <td className="py-4 px-4 text-slate-400 text-sm">{item.peak}</td>
+                  </motion.tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-slate-400">
+                    Aucune donnée disponible
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </GlassCard>
     </div>
   );

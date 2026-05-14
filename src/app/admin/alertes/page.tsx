@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import {
   Select,
   SelectContent,
@@ -24,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useSecureApi } from '@/hooks/useSecureApi';
 
 interface Alerte {
   id: number;
@@ -38,8 +40,10 @@ interface Alerte {
 }
 
 export default function AdminAlertsPage() {
+  const { secureFetch } = useSecureApi();
   const [alertes, setAlertes] = useState<Alerte[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState({
     statut: 'all',
     acquittee: 'all',
@@ -49,27 +53,62 @@ export default function AdminAlertsPage() {
     fetchAlertes();
   }, [filter]);
 
+  const getErrorMessage = (err: unknown, statusCode?: number): string => {
+    if (statusCode === 401 || statusCode === 403) {
+      return "Vous n'avez pas les permissions pour accéder à ces données.";
+    }
+    
+    if (statusCode === 404) {
+      return "Endpoint API non trouvé.";
+    }
+    
+    if (err instanceof Error && (err.message.includes("Failed to fetch") || err.message.includes("fetch failed") || err.message.includes("NetworkError"))) {
+      return "Impossible de se connecter au serveur. Assurez-vous que le backend est en cours d'exécution.";
+    }
+    
+    // Also catch plain TypeError without message checking just in case
+    if (err instanceof TypeError) {
+      return "Impossible de se connecter au serveur. Assurez-vous que le backend est en cours d'exécution.";
+    }
+    
+    if (err instanceof Error && err.name === 'AbortError') {
+      return "Délai d'attente dépassé. Le serveur met trop de temps à répondre.";
+    }
+    
+    return "Erreur lors du chargement des alertes.";
+  };
+
   const fetchAlertes = async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams();
       if (filter.statut && filter.statut !== 'all') params.append('statut', filter.statut);
       if (filter.acquittee && filter.acquittee !== 'all') params.append('acquittee', filter.acquittee);
 
-      const response = await fetch(
-        `/api/energy/alertes/?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-          },
-        }
-      );
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      if (!response.ok) throw new Error('Erreur lors du chargement');
-      const data = await response.json();
-      setAlertes(data);
-    } catch (error) {
-      console.error('Erreur:', error);
+      try {
+        const response = await secureFetch(
+          `${baseUrl}/api/energy/alertes/?${params.toString()}`,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+
+        const data = await response.json();
+        setAlertes(Array.isArray(data) ? data : data.results || []);
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        throw fetchErr;
+      }
+    } catch (err) {
+      const statusCode = (err as any)?.status || null;
+      const message = getErrorMessage(err, statusCode);
+      setError(message);
+      // console.error removed
     } finally {
       setLoading(false);
     }
@@ -77,27 +116,28 @@ export default function AdminAlertsPage() {
 
   const marquerConsultee = async (alerteId: number) => {
     try {
-      const response = await fetch(
-        `/api/energy/alertes/${alerteId}/marquer_consultee/`,
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await secureFetch(
+        `${baseUrl}/api/energy/alertes/${alerteId}/marquer_consultee/`,
         {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-          },
         }
       );
 
-      if (!response.ok) throw new Error('Erreur');
-      fetchAlertes();
+      if (response.ok) {
+        fetchAlertes();
+      }
     } catch (error) {
       console.error('Erreur:', error);
+      setError('Erreur lors de la mise à jour de l\'alerte');
     }
   };
 
   const acquitterAlerte = async (alerteId: number) => {
     try {
-      const response = await fetch(
-        `/api/energy/alertes/${alerteId}/acquitter/`,
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await secureFetch(
+        `${baseUrl}/api/energy/alertes/${alerteId}/acquitter/`,
         {
           method: 'POST',
           headers: {

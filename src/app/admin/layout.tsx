@@ -8,37 +8,25 @@ import Header from "@/components/layout/Header";
 import { Loader2 } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, login } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isChecking, setIsChecking] = useState(true);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
-    // تأخير قصير للسماح بتحميل البيانات من localStorage
-    const timer = setTimeout(() => {
-      // Basic route protection
-      if (!isAuthenticated) {
-        // للاختبار: دخول تلقائي كـ ADMIN
-        const testAdminUser = {
-          id: 1,
-          username: 'admin',
-          email: 'admin@smartmeter.local',
-          role: 'ADMIN' as const,
-          fullName: 'Admin User',
-        };
-        login('test-token-admin', testAdminUser);
-        setIsChecking(false);
-      } else if (user && user.role !== 'ADMIN') {
-        router.push("/dashboard");
-      } else {
-        setIsChecking(false);
-      }
-    }, 100);
-    
-    return () => clearTimeout(timer);
-  }, [isAuthenticated, user, router, login]);
+    // Wait for auth to finish loading
+    if (isLoading) return;
 
-  if (isChecking) {
+    if (!isAuthenticated) {
+      router.push("/auth/login");
+    } else if (user && user.role !== 'ADMIN') {
+      router.push("/dashboard");
+    } else {
+      setIsCheckingAuth(false);
+    }
+  }, [isLoading, isAuthenticated, user, router]);
+
+  if (isCheckingAuth) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-brand-dark">
         <Loader2 className="w-10 h-10 text-brand-cyan animate-spin" />

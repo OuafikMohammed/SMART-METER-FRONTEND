@@ -31,15 +31,24 @@ export default function LoginPage() {
 
       const data = await response.json();
 
-      if (response.ok) {
+      if (response.ok && data.access && data.user) {
+        // Store in localStorage before setting state
+        localStorage.setItem('sm_token', data.access);
+        localStorage.setItem('sm_user', JSON.stringify(data.user));
+        
+        // Update auth context
         login(data.access, data.user);
         
-        // Redirection basée sur le rôle
-        if (data.user.role === 'ADMIN') {
-          router.push("/admin");
-        } else {
-          router.push("/dashboard");
-        }
+        setStatus("idle");
+        
+        // Small delay to ensure state is updated before redirect
+        setTimeout(() => {
+          if (data.user.role === 'ADMIN') {
+            router.push("/admin");
+          } else {
+            router.push("/dashboard");
+          }
+        }, 100);
       } else {
         setStatus("error");
         setError(data.detail || "Identifiants incorrects. Veuillez réessayer.");
@@ -47,6 +56,7 @@ export default function LoginPage() {
     } catch (err) {
       setStatus("error");
       setError("Erreur de connexion au serveur.");
+      console.error('Login error:', err);
     }
   };
 

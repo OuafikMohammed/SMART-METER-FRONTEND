@@ -8,23 +8,25 @@ import Header from "@/components/layout/Header";
 import { Loader2 } from "lucide-react";
 
 export default function ResidentLayout({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isChecking, setIsChecking] = useState(true);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
-    // Basic route protection
+    // Wait for auth to finish loading, then check authentication
+    if (isLoading) return;
+
     if (!isAuthenticated) {
       router.push("/auth/login");
     } else if (user && user.role !== 'RESIDENT') {
       router.push("/admin");
     } else {
-      setIsChecking(false);
+      setIsCheckingAuth(false);
     }
-  }, [isAuthenticated, user, router]);
+  }, [isLoading, isAuthenticated, user, router]);
 
-  if (isChecking) {
+  if (isCheckingAuth) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-brand-dark">
         <Loader2 className="w-10 h-10 text-brand-cyan animate-spin" />

@@ -3,20 +3,59 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import GlassCard from '@/components/ui/GlassCard';
-import { Search, MapPin, Zap, AlertTriangle, Edit2, Trash2, Plus } from 'lucide-react';
+import { Search, MapPin, Zap, AlertTriangle, Edit2, Trash2, Plus, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
-const mockFoyers = [
-  { id: 1, name: 'Foyer A-12', address: '123 Rue de Paris', consumption: 450, status: 'active', lastUpdate: '2m ago' },
-  { id: 2, name: 'Foyer B-45', address: '456 Rue de Lyon', consumption: 380, status: 'active', lastUpdate: '5m ago' },
-  { id: 3, name: 'Foyer C-89', address: '789 Rue de Marseille', consumption: 320, status: 'inactive', lastUpdate: '1h ago' },
-  { id: 4, name: 'Foyer D-23', address: '321 Rue de Toulouse', consumption: 290, status: 'active', lastUpdate: '3m ago' },
-  { id: 5, name: 'Foyer E-67', address: '654 Rue de Nice', consumption: 160, status: 'active', lastUpdate: '7m ago' },
-];
+interface Foyer {
+  id: number;
+  name: string;
+  address: string;
+  consumption: number;
+  status: 'active' | 'inactive';
+  lastUpdate: string;
+}
 
 export default function NodesPage() {
-  const [foyers, setFoyers] = useState(mockFoyers);
+  const { token } = useAuth();
+  const [foyers, setFoyers] = useState<Foyer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredFoyers, setFilteredFoyers] = useState(mockFoyers);
+  const [filteredFoyers, setFilteredFoyers] = useState<Foyer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchFoyers = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${baseUrl}/api/admin/foyers/`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) throw new Error('Erreur lors du chargement des foyers');
+        
+        const data = await response.json();
+        const foyersList = data.results || data;
+        setFoyers(Array.isArray(foyersList) ? foyersList : []);
+        setFilteredFoyers(Array.isArray(foyersList) ? foyersList : []);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Erreur inconnue';
+        setError(message);
+        console.error('Erreur fetch foyers:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (token) {
+      fetchFoyers();
+    }
+  }, [token]);
 
   useEffect(() => {
     const filtered = foyers.filter(
@@ -27,8 +66,22 @@ export default function NodesPage() {
     setFilteredFoyers(filtered);
   }, [searchTerm, foyers]);
 
-  const handleDelete = (id: number) => {
-    setFoyers(foyers.filter((f) => f.id !== id));
+  const handleDelete = async (id: number) => {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${baseUrl}/api/admin/foyers/${id}/`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error('Erreur lors de la suppression');
+      
+      setFoyers(foyers.filter((f) => f.id !== id));
+    } catch (err) {
+      console.error('Erreur suppression foyer:', err);
+    }
   };
 
   return (
@@ -92,72 +145,93 @@ export default function NodesPage() {
         transition={{ delay: 0.2 }}
       >
         <GlassCard className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-400">Nom</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-400">Adresse</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-400">Consommation</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-400">Statut</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-400">Dernière Mise à Jour</th>
-                  <th className="px-6 py-4 text-center text-xs font-bold text-slate-400">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredFoyers.map((foyer, index) => (
-                  <motion.tr
-                    key={foyer.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-brand-cyan/20 flex items-center justify-center">
-                          <MapPin className="w-4 h-4 text-brand-cyan" />
-                        </div>
-                        <span className="font-medium text-white">{foyer.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-400 text-sm">{foyer.address}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <Zap className="w-4 h-4 text-brand-cyan" />
-                        <span className="font-medium text-white">{foyer.consumption} kWh</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          foyer.status === 'active'
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'bg-amber-500/20 text-amber-400'
-                        }`}
+          {error && (
+            <div className="flex items-center gap-2 p-4 border-b border-red-500/20 bg-red-500/10">
+              <AlertCircle className="text-red-400" size={20} />
+              <span className="text-red-400 text-sm">{error}</span>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex justify-center items-center h-40">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-cyan"></div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-400">Foyer</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-400">Adresse</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-400">Puissance</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-400">Statut</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-400">Résident</th>
+                    <th className="px-6 py-4 text-center text-xs font-bold text-slate-400">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredFoyers.length > 0 ? (
+                    filteredFoyers.map((foyer, index) => (
+                      <motion.tr
+                        key={foyer.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="border-b border-white/5 hover:bg-white/5 transition-colors"
                       >
-                        {foyer.status === 'active' ? 'Actif' : 'Inactif'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-slate-400 text-sm">{foyer.lastUpdate}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button className="p-2 rounded-lg hover:bg-white/5 transition-colors">
-                          <Edit2 className="w-4 h-4 text-brand-cyan" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(foyer.id)}
-                          className="p-2 rounded-lg hover:bg-white/5 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-brand-cyan/20 flex items-center justify-center">
+                              <MapPin className="w-4 h-4 text-brand-cyan" />
+                            </div>
+                            <span className="font-medium text-white">{foyer.numero_foyer || foyer.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-slate-400 text-sm">{foyer.adresse || foyer.address}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <Zap className="w-4 h-4 text-brand-cyan" />
+                            <span className="font-medium text-white">{foyer.puissance_souscrite || foyer.consumption} kW</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-bold ${
+                              (foyer.is_active !== false)
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : 'bg-amber-500/20 text-amber-400'
+                            }`}
+                          >
+                            {(foyer.is_active !== false) ? 'Actif' : 'Inactif'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-slate-400 text-sm">{foyer.resident_name || foyer.lastUpdate || 'N/A'}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button className="p-2 rounded-lg hover:bg-white/5 transition-colors">
+                              <Edit2 className="w-4 h-4 text-brand-cyan" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(foyer.id)}
+                              className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400">
+                        {searchTerm ? 'Aucun foyer trouvé' : 'Aucun foyer disponible'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </GlassCard>
       </motion.div>
     </div>

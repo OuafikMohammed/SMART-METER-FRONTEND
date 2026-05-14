@@ -18,6 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import PremiumButton from '@/components/ui/PremiumButton';
+import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import {
   Select,
   SelectContent,
@@ -25,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useSecureApi } from '@/hooks/useSecureApi';
 
 interface Anomalie {
   id: number;
@@ -43,8 +45,10 @@ interface Anomalie {
 }
 
 export default function AdminAnomaliesPage() {
+  const { secureFetch } = useSecureApi();
   const [anomalies, setAnomalies] = useState<Anomalie[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState({
     statut: 'all',
     severite: 'all',
@@ -54,31 +58,64 @@ export default function AdminAnomaliesPage() {
     fetchAnomalies();
   }, [filter]);
 
+  const getErrorMessage = (err: unknown, statusCode?: number): string => {
+    if (statusCode === 401 || statusCode === 403) {
+      return "Vous n'avez pas les permissions pour accéder à ces données.";
+    }
+    
+    if (statusCode === 404) {
+      return "Endpoint API non trouvé.";
+    }
+    
+    if (err instanceof Error && (err.message.includes("Failed to fetch") || err.message.includes("fetch failed") || err.message.includes("NetworkError"))) {
+      return "Impossible de se connecter au serveur. Assurez-vous que le backend est en cours d'exécution.";
+    }
+    
+    // Also catch plain TypeError without message checking just in case
+    if (err instanceof TypeError) {
+      return "Impossible de se connecter au serveur. Assurez-vous que le backend est en cours d'exécution.";
+    }
+    
+    if (err instanceof Error && err.name === 'AbortError') {
+      return "Délai d'attente dépassé. Le serveur met trop de temps à répondre.";
+    }
+    
+    return "Erreur lors du chargement des anomalies.";
+  };
+
   const fetchAnomalies = async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams();
       if (filter.statut && filter.statut !== 'all') params.append('statut', filter.statut);
       if (filter.severite && filter.severite !== 'all') params.append('severite', filter.severite);
 
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const token = localStorage.getItem('sm_token') || localStorage.getItem('access_token');
-      const response = await fetch(
-        `${baseUrl}/api/energy/anomalies/?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      if (!response.ok) throw new Error('Erreur lors du chargement');
-      const data = await response.json();
-      // Handle paginated responses
-      const results = data.results || data;
-      setAnomalies(Array.isArray(results) ? results : []);
-    } catch (error) {
-      console.error('Erreur:', error);
+      try {
+        const response = await secureFetch(
+          `${baseUrl}/api/energy/anomalies/?${params.toString()}`,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+
+        const data = await response.json();
+        // Handle paginated responses
+        const results = data.results || data;
+        setAnomalies(Array.isArray(results) ? results : []);
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        throw fetchErr;
+      }
+    } catch (err) {
+      const statusCode = (err as any)?.status || null;
+      const message = getErrorMessage(err, statusCode);
+      setError(message);
+      // console.error removed
     } finally {
       setLoading(false);
     }
@@ -87,42 +124,38 @@ export default function AdminAnomaliesPage() {
   const marquerConsultee = async (anomalieId: number) => {
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const token = localStorage.getItem('sm_token') || localStorage.getItem('access_token');
-      const response = await fetch(
+      const response = await secureFetch(
         `${baseUrl}/api/energy/anomalies/${anomalieId}/marquer_consultee/`,
         {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
-      if (!response.ok) throw new Error('Erreur');
-      fetchAnomalies();
+      if (response.ok) {
+        fetchAnomalies();
+      }
     } catch (error) {
       console.error('Erreur:', error);
+      setError('Erreur lors de la mise à jour de l\'anomalie');
     }
   };
 
   const marquerAcquittee = async (anomalieId: number) => {
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const token = localStorage.getItem('sm_token') || localStorage.getItem('access_token');
-      const response = await fetch(
+      const response = await secureFetch(
         `${baseUrl}/api/energy/anomalies/${anomalieId}/marquer_acquittee/`,
         {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
-      if (!response.ok) throw new Error('Erreur');
-      fetchAnomalies();
+      if (response.ok) {
+        fetchAnomalies();
+      }
     } catch (error) {
       console.error('Erreur:', error);
+      setError('Erreur lors de la mise à jour de l\'anomalie');
     }
   };
 
@@ -162,6 +195,13 @@ export default function AdminAnomaliesPage() {
           Score Hugging Face • Statuts: NOUVELLE → CONSULTEE → ACQUITTEE
         </p>
       </div>
+
+      {/* Error Alert */}
+      <ErrorAlert 
+        error={error} 
+        onRetry={fetchAnomalies}
+        loading={loading}
+      />
 
       {/* Filtres */}
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 flex gap-4 flex-wrap">
