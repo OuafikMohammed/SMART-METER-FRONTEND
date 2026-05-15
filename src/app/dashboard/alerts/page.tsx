@@ -79,7 +79,7 @@ export default function AlertesPage() {
   const handleDelete = async (alertId: number) => {
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${baseUrl}/api/energy/alerts/${alertId}/`, {
+      const response = await fetch(`${baseUrl}/api/energy/alertes/${alertId}/`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

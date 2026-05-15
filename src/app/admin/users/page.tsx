@@ -55,8 +55,16 @@ export default function UsersPage() {
           return;
         }
 
+        // Temporarily show a message - backend user endpoints not yet available
+        // TODO: Create /api/users/ endpoint in backend
+        toast.info('Gestion utilisateurs non encore disponible');
+        setUsers([]);
+        setFilteredUsers([]);
+        setLoading(false);
+        return;
+        
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/admin/users/`,
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/users/`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,

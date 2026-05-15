@@ -45,25 +45,31 @@ export default function ConsumptionHistory() {
         };
 
         // Fetch history data
-        const historyRes = await fetch(`${baseUrl}/api/energy/consommations/consumption_history/?period=${selectedPeriod}`, {
+        const historyRes = await fetch(`${baseUrl}/api/energy/consommations/`, {
           headers,
         });
 
         if (!historyRes.ok) throw new Error('Erreur lors du chargement de l\'historique');
         const historyDataRes = await historyRes.json();
-        setHistoryData(historyDataRes.results || historyDataRes);
+        const results = historyDataRes.results || historyDataRes;
+        setHistoryData(Array.isArray(results) ? results : []);
 
-        // Fetch period stats
-        const statsRes = await fetch(`${baseUrl}/api/energy/consommations/consumption_stats/?period=${selectedPeriod}`, {
-          headers,
-        });
-
-        if (!statsRes.ok) throw new Error('Erreur lors du chargement des statistiques');
-        const statsData = await statsRes.json();
+        // Calculate period stats from history data
+        const historyArray = Array.isArray(results) ? results : [];
+        const avgConsumption = historyArray.length > 0 
+          ? historyArray.reduce((sum: number, item: any) => sum + (item.kwh || 0), 0) / historyArray.length 
+          : 0;
+        const maxConsumption = historyArray.length > 0
+          ? Math.max(...historyArray.map((item: any) => item.kwh || 0))
+          : 0;
         
         setPeriodStats(prev => ({
           ...prev,
-          [selectedPeriod]: statsData || prev[selectedPeriod]
+          [selectedPeriod]: {
+            avgConsumption: avgConsumption.toFixed(2),
+            maxConsumption: maxConsumption.toFixed(2),
+            totalConsumption: historyArray.reduce((sum: number, item: any) => sum + (item.kwh || 0), 0).toFixed(2)
+          }
         }));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Erreur inconnue';

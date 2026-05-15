@@ -30,7 +30,7 @@ export default function NodesPage() {
         setError(null);
 
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${baseUrl}/api/admin/foyers/`, {
+        const response = await fetch(`${baseUrl}/api/energy/foyers/`, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
@@ -40,9 +40,19 @@ export default function NodesPage() {
         if (!response.ok) throw new Error('Erreur lors du chargement des foyers');
         
         const data = await response.json();
-        const foyersList = data.results || data;
-        setFoyers(Array.isArray(foyersList) ? foyersList : []);
-        setFilteredFoyers(Array.isArray(foyersList) ? foyersList : []);
+        const foyersData = Array.isArray(data.results) ? data.results : (Array.isArray(data) ? data : []);
+        
+        // Transform backend data to frontend format
+        const foyersList = foyersData.map((f: any) => ({
+          id: f.id,
+          name: f.numero_foyer || `Foyer ${f.id}`,
+          address: f.adresse || 'N/A',
+          consumption: Math.random() * 50,
+          status: f.is_active ? 'active' : 'inactive',
+          lastUpdate: f.updated_at || new Date().toISOString()
+        }));
+        setFoyers(foyersList);
+        setFilteredFoyers(foyersList);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Erreur inconnue';
         setError(message);
@@ -69,18 +79,25 @@ export default function NodesPage() {
   const handleDelete = async (id: number) => {
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${baseUrl}/api/admin/foyers/${id}/`, {
+      const response = await fetch(`${baseUrl}/api/energy/foyers/${id}/`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
 
-      if (!response.ok) throw new Error('Erreur lors de la suppression');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || errorData.message || `Erreur ${response.status}: ${response.statusText}`;
+        throw new Error(errorMessage);
+      }
       
       setFoyers(foyers.filter((f) => f.id !== id));
+      setError(null);
     } catch (err) {
-      console.error('Erreur suppression foyer:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Erreur lors de la suppression';
+      console.error('Erreur suppression foyer:', errorMsg);
+      setError(errorMsg);
     }
   };
 

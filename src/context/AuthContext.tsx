@@ -72,21 +72,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/refresh/`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/auth/refresh/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
         body: JSON.stringify({ refresh: savedToken }),
+        credentials: 'include',
       });
+
+      // Check content type
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('[AuthContext] Token refresh returned non-JSON response');
+        logout();
+        return;
+      }
 
       if (response.ok) {
         const data = await response.json();
         localStorage.setItem('sm_token', data.access);
         setToken(data.access);
+        console.log('[AuthContext] Token refreshed successfully');
       } else {
+        console.warn('[AuthContext] Token refresh failed with status', response.status);
         logout();
       }
     } catch (error) {
-      console.error('Error refreshing token:', error);
+      console.error('[AuthContext] Error refreshing token:', error);
       logout();
     }
   }, [logout]);
