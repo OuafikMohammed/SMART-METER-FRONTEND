@@ -9,6 +9,8 @@ import AnimatedInput from "@/components/ui/AnimatedInput";
 import LaserFlow from "@/components/react-bits/LaserFlow/LaserFlow";
 import { Zap, ArrowLeft, Globe, Lock, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { authApi } from "@/lib/api";
+
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({ username: "", password: "" });
@@ -22,60 +24,18 @@ export default function LoginPage() {
     setStatus("loading");
     setError("");
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    const endpoint = `${apiUrl}/api/auth/login/`;
-
     try {
-      console.log(`[Login] Attempting to authenticate to: ${endpoint}`);
-      console.log(`[Login] Credentials:`, { username: formData.username, password: '***' });
+      const result = await authApi.login(formData);
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: JSON.stringify(formData),
-        credentials: "include", // Include cookies for CORS
-      });
-
-      console.log(`[Login] Response status: ${response.status}`);
-      console.log(`[Login] Response headers:`, {
-        contentType: response.headers.get('content-type'),
-        corsOrigin: response.headers.get('access-control-allow-origin'),
-      });
-
-      // Check if response content-type is JSON
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('[Login] Non-JSON response received:', text.substring(0, 200));
-        setStatus("error");
-        setError(`Erreur serveur (${response.status}): La réponse n'est pas au format JSON. Vérifiez que l'API est correctement configurée.`);
-        return;
-      }
-
-      const data = await response.json();
-      console.log(`[Login] Parsed response data:`, { 
-        hasAccess: !!data.access, 
-        hasUser: !!data.user,
-        userRole: data.user?.role 
-      });
-
-      if (response.ok && data.access && data.user) {
-        // Store in localStorage before setting state
-        localStorage.setItem('sm_token', data.access);
-        localStorage.setItem('sm_user', JSON.stringify(data.user));
-        
-        // Update auth context
-        login(data.access, data.user);
-        
+      if (result.status === 200 && result.data) {
+        const { access, refresh, user } = result.data;
+        localStorage.setItem('sm_access_token', access);
+        localStorage.setItem('sm_refresh_token', refresh);
+        localStorage.setItem('sm_user', JSON.stringify(user));
+        login(access, refresh, user);
         setStatus("idle");
-        console.log(`[Login] Login successful, redirecting to ${data.user.role === 'ADMIN' ? '/admin' : '/dashboard'}`);
-        
-        // Small delay to ensure state is updated before redirect
         setTimeout(() => {
-          if (data.user.role === 'ADMIN') {
+          if (user.role === 'ADMIN') {
             router.push("/admin");
           } else {
             router.push("/dashboard");
@@ -83,27 +43,13 @@ export default function LoginPage() {
         }, 100);
       } else {
         setStatus("error");
-        const errorMsg = data.detail || data.message || "Identifiants incorrects. Veuillez réessayer.";
-        console.error('[Login] Authentication failed:', { status: response.status, errorMsg, data });
-        setError(errorMsg);
+        setError(result.error || "Identifiants incorrects. Veuillez réessayer.");
       }
     } catch (err) {
       setStatus("error");
       const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error('[Login] Exception caught:', { 
-        message: errorMessage, 
-        error: err,
-        apiUrl,
-      });
-      
-      // Provide more specific error messages
-      if (errorMessage.includes('Failed to fetch')) {
-        setError("Impossible de se connecter au serveur. Vérifiez que:\n1. Le serveur API est en cours d'exécution sur " + apiUrl + "\n2. CORS est activé\n3. Votre firewall autorise la connexion");
-      } else if (errorMessage.includes('JSON')) {
-        setError("Le serveur a retourné une réponse invalide. Vérifiez les logs du serveur.");
-      } else {
-        setError(`Erreur de connexion: ${errorMessage}`);
-      }
+      console.error('[Login] Exception caught:', err);
+      setError(`Erreur de connexion: ${errorMessage}`);
     }
   };
 

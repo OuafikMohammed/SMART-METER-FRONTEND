@@ -3,6 +3,7 @@
  * Appelle GET /api/energy/resident/dashboard/
  */
 import { useState, useEffect, useCallback } from 'react';
+import { residentApi } from '@/lib/api';
 
 export interface DashboardData {
   consommation_actuelle: number;
@@ -12,6 +13,7 @@ export interface DashboardData {
   alertes_actives: number;
   variation_jour: number;
   points_graphique: GraphPoint[];
+  conseil_ia?: string;
 }
 
 export interface GraphPoint {
@@ -43,37 +45,28 @@ export function useDashboard(): UseDashboardResult {
       setLoading(true);
       setError(null);
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const url = `${baseUrl}/api/energy/resident/dashboard/`;
-      const token = localStorage.getItem('sm_token') || localStorage.getItem('access_token');
+      const token = localStorage.getItem('sm_access_token') || localStorage.getItem('sm_token');
 
       if (!token) {
         throw new Error('Token d\'authentification non trouvé');
       }
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const { data: dashboardData, error: apiError, status } = await residentApi.getDashboard(token);
 
-      if (response.status === 401) {
+      if (status === 401) {
         // Token expiré - rediriger vers login
+        localStorage.removeItem('sm_access_token');
+        localStorage.removeItem('sm_refresh_token');
         localStorage.removeItem('sm_token');
-        localStorage.removeItem('access_token');
-        window.location.href = '/login';
+        window.location.href = '/auth/login';
         return;
       }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: response.statusText }));
-        throw new Error(errorData.error || `Erreur API: ${response.status}`);
+      if (apiError || !dashboardData) {
+        throw new Error(apiError || `Erreur API: ${status}`);
       }
 
-      const dashboardData = await response.json();
-      setData(dashboardData);
+      setData(dashboardData as any);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erreur inconnue';
       setError(message);

@@ -1,23 +1,34 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import GlassCard from "@/components/ui/GlassCard";
 import Orb from "@/components/react-bits/Orb/Orb";
-import { AlertCircle, ShieldAlert, CheckCircle2, MoreHorizontal } from "lucide-react";
+import { AlertCircle, ShieldAlert, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const anomalies = [
-  { id: "AN-1042", source: "HVAC System - North Wing", type: "Sudden Load Spike", severity: "high", time: "10:24 AM" },
-  { id: "AN-1041", source: "Lighting Grid - Floor 4", type: "Voltage Fluctuations", severity: "medium", time: "09:15 AM" },
-  { id: "AN-1040", source: "Elevator B-2", type: "Motor Overheat", severity: "low", time: "08:42 AM" },
-  { id: "AN-1039", source: "Main Transformer", type: "Frequency Deviation", severity: "high", time: "07:30 AM" },
-];
+import { useAuth } from "@/context/AuthContext";
+import { anomalyApi } from "@/lib/api";
 
 const AnomalySection = () => {
+  const [anomalies, setAnomalies] = useState<any[]>([]);
+  const { token } = useAuth();
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchAnomalies = async () => {
+      if (!token) return;
+      const res = await anomalyApi.getAnomalies(token);
+      if (res && res.data) {
+        const data = Array.isArray(res.data.results) ? res.data.results : (Array.isArray(res.data) ? res.data : []);
+        if (mounted) setAnomalies(data);
+      }
+    };
+    fetchAnomalies();
+    return () => { mounted = false; };
+  }, [token]);
+
   return (
     <section id="anomalies" className="py-24 relative overflow-hidden bg-brand-dark min-h-screen flex flex-col justify-center">
-      {/* Immersive Background */}
       <div className="absolute inset-0 z-0">
         <Orb
           hoverIntensity={0.5}
@@ -107,31 +118,31 @@ const AnomalySection = () => {
                     <tbody className="divide-y divide-white/5">
                       {anomalies.map((anomaly, i) => (
                         <motion.tr 
-                          key={anomaly.id}
+                          key={anomaly.id || anomaly.pk || i}
                           initial={{ opacity: 0, y: 10 }}
                           whileInView={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.1 }}
                           className="group hover:bg-white/[0.02] transition-colors"
                         >
-                          <td className="px-6 py-4 font-mono text-xs text-brand-cyan">{anomaly.id}</td>
+                          <td className="px-6 py-4 font-mono text-xs text-brand-cyan">{anomaly.id || anomaly.pk}</td>
                           <td className="px-6 py-4">
-                             <div className="text-sm font-bold text-white">{anomaly.source}</div>
-                             <div className="text-[10px] text-slate-500 italic">{anomaly.type}</div>
+                             <div className="text-sm font-bold text-white">{anomaly.consommation?.foyer?.numero_foyer || anomaly.source || anomaly.consommation?.foyer}</div>
+                             <div className="text-[10px] text-slate-500 italic">{anomaly.description || anomaly.type || anomaly.consommation?.kwh + ' kWh'}</div>
                           </td>
                           <td className="px-6 py-4">
                              <div className="flex items-center gap-2 text-xs text-slate-400">
                                 <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                                Analyzing
+                                {anomaly.statut || 'Analyzing'}
                              </div>
                           </td>
                           <td className="px-6 py-4">
                              <div className={cn(
                                 "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest inline-block border",
-                                anomaly.severity === "high" ? "bg-red-500/20 text-red-500 border-red-500/30 shadow-[0_0_10px_rgba(239,68,68,0.2)]" :
-                                anomaly.severity === "medium" ? "bg-amber-500/20 text-amber-500 border-amber-500/30" :
+                                (anomaly.severite || anomaly.severity) === "high" ? "bg-red-500/20 text-red-500 border-red-500/30 shadow-[0_0_10px_rgba(239,68,68,0.2)]" :
+                                (anomaly.severite || anomaly.severity) === "medium" ? "bg-amber-500/20 text-amber-500 border-amber-500/30" :
                                 "bg-emerald-500/20 text-emerald-500 border-emerald-500/30"
                              )}>
-                                {anomaly.severity}
+                                {anomaly.severite || anomaly.severity || 'unknown'}
                              </div>
                           </td>
                           <td className="px-6 py-4 text-right">

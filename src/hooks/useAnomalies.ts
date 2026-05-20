@@ -64,7 +64,11 @@ export function useAnomalies(filters?: AnomalieFilters): UseAnomaliesResult {
 
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const url = `${baseUrl}/api/energy/anomalies/?${params.toString()}`;
-      const token = localStorage.getItem('sm_token') || localStorage.getItem('access_token');
+      const token = localStorage.getItem('sm_access_token') || localStorage.getItem('sm_token');
+
+      if (!token) {
+        throw new Error('Token d\'authentification non trouvé');
+      }
 
       const response = await fetch(url, {
         method: 'GET',
@@ -97,9 +101,13 @@ export function useAnomalies(filters?: AnomalieFilters): UseAnomaliesResult {
    */
   const acquitter = useCallback(async (id: number) => {
     try {
-      const token = localStorage.getItem('sm_token') || localStorage.getItem('access_token');
+      const token = localStorage.getItem('sm_access_token') || localStorage.getItem('sm_token');
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       
+      if (!token) {
+        throw new Error('Token d\'authentification non trouvé');
+      }
+
       const response = await fetch(`${baseUrl}/api/energy/anomalies/${id}/marquer_acquittee/`, {
         method: 'POST',
         headers: {

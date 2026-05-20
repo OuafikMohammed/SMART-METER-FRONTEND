@@ -6,6 +6,8 @@ import { Mail, Lock, Shield, ArrowRight, Loader2, CheckCircle2 } from "lucide-re
 import PremiumButton from "@/components/ui/PremiumButton";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import { authApi } from "@/lib/api";
+
 
 const AdminLoginPage = () => {
   const [formData, setFormData] = useState({ username: "", password: "" });
@@ -20,31 +22,27 @@ const AdminLoginPage = () => {
     setError("");
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/login/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+      const result = await authApi.login(formData);
 
-      const data = await response.json();
-
-      if (response.ok) {
-        if (data.user.role !== 'ADMIN') {
+      if (result.status === 200 && result.data) {
+        const { access, refresh, user } = result.data;
+        if (user.role !== 'ADMIN') {
           setStatus("error");
           setError("Accès réservé aux administrateurs.");
           return;
         }
 
-        login(data.access, data.user);
+        localStorage.setItem('sm_access_token', access);
+        localStorage.setItem('sm_refresh_token', refresh);
+        localStorage.setItem('sm_user', JSON.stringify(user));
+        login(access, refresh, user);
         setStatus("success");
-        
-        // Redirect to admin dashboard after a delay
         setTimeout(() => {
           router.push("/admin");
         }, 2000);
       } else {
         setStatus("error");
-        setError(data.detail || "Identifiants invalides.");
+        setError(result.error || "Identifiants invalides.");
       }
     } catch (err) {
       setStatus("error");

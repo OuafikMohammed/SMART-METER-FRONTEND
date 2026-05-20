@@ -36,7 +36,7 @@ export const useSecureApi = () => {
             // Retry the request with new token
             const newHeaders = {
               ...headers,
-              'Authorization': `Bearer ${localStorage.getItem('sm_token')}`,
+              'Authorization': `Bearer ${localStorage.getItem('sm_access_token') || localStorage.getItem('sm_token')}`,
             };
             
             response = await fetch(url, {

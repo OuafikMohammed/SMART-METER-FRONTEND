@@ -17,6 +17,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Bot, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/context/AuthContext';
+import { residentApi } from '@/lib/api';
 
 interface Message {
   id: string;
@@ -40,6 +42,7 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 export default function ChatInterface() {
+  const { token } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,32 +52,20 @@ export default function ChatInterface() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const token = localStorage.getItem('sm_token');
-        if (!token) {
-          toast.error('Non authentifié');
+        if (!token) return;
+
+        const { data, error } = await residentApi.getChatHistory(token);
+
+        if (error || !data) {
+          console.warn('Erreur lors du chargement de l\'historique:', error);
           return;
         }
-
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/energy/chat/`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        if (!response.ok) {
-          console.warn('Erreur lors du chargement de l\'historique');
-          return;
-        }
-
-        const data: ChatResponse[] = await response.json();
 
         // Transformer en Messages alternées
+        // Data est ordonné du plus récent au plus ancien
         const transformedMessages: Message[] = [];
-        data.forEach((conv) => {
+        // On traite du plus ancien au plus récent pour l'affichage
+        [...data].reverse().forEach((conv: any) => {
           transformedMessages.push({
             id: `user-${conv.id}`,
             role: 'user',
@@ -95,14 +86,16 @@ export default function ChatInterface() {
           });
         });
 
-        setMessages(transformedMessages.reverse());
+        setMessages(transformedMessages);
       } catch (error) {
         console.error('Erreur lors du chargement de l\'historique:', error);
       }
     };
 
-    fetchHistory();
-  }, []);
+    if (token) {
+      fetchHistory();
+    }
+  }, [token]);
 
   // Scroll vers le bas quand nouveaux messages
   useEffect(() => {
@@ -110,7 +103,7 @@ export default function ChatInterface() {
   }, [messages, loading]);
 
   const sendMessage = async (question: string) => {
-    if (!question.trim()) return;
+    if (!question.trim() || !token) return;
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -127,32 +120,11 @@ export default function ChatInterface() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('sm_token');
-      if (!token) {
-        toast.error('Session expirée');
-        setLoading(false);
-        return;
+      const { data, error } = await residentApi.sendChatMessage(token, question);
+
+      if (error || !data) {
+        throw new Error(error || 'Erreur inconnue');
       }
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/energy/chat/`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ question }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Response status:', response.status, 'Body:', errorText);
-        throw new Error(`Erreur ${response.status}: ${errorText}`);
-      }
-
-      const data: ChatResponse = await response.json();
 
       const assistantMessage: Message = {
         id: `assistant-${data.id}`,
@@ -167,7 +139,7 @@ export default function ChatInterface() {
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Erreur:', error);
-      toast.error('Erreur lors de la réponse');
+      toast.error('Erreur lors de la réponse: ' + (error instanceof Error ? error.message : 'Erreur serveur'));
     } finally {
       setLoading(false);
     }

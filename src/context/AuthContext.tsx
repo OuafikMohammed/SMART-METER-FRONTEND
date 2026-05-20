@@ -1,6 +1,8 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { authApi } from '@/lib/api';
+
 
 interface User {
   id: number;
@@ -8,12 +10,15 @@ interface User {
   email: string;
   role: 'RESIDENT' | 'ADMIN';
   fullName: string;
+  first_name?: string;
+  last_name?: string;
+  managed_by?: number;
 }
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (token: string, user: User) => void;
+  login: (accessToken: string, refreshToken: string, user: User) => void;
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -25,22 +30,31 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [refreshTokenValue, setRefreshTokenValue] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Initialize auth from localStorage
   useEffect(() => {
     const initializeAuth = () => {
       try {
-        const savedToken = localStorage.getItem('sm_token');
+        const savedToken = localStorage.getItem('sm_access_token') || localStorage.getItem('sm_token');
+        const savedRefresh = localStorage.getItem('sm_refresh_token') || localStorage.getItem('refresh_token');
         const savedUser = localStorage.getItem('sm_user');
-        
-        if (savedToken && savedUser) {
+
+        if (savedToken && savedRefresh && savedUser) {
+          setToken(savedToken);
+          setRefreshTokenValue(savedRefresh);
+          setUser(JSON.parse(savedUser));
+        } else if (savedToken && savedUser) {
           setToken(savedToken);
           setUser(JSON.parse(savedUser));
         }
       } catch (error) {
         console.error('Error loading auth from localStorage:', error);
+        localStorage.removeItem('sm_access_token');
+        localStorage.removeItem('sm_refresh_token');
         localStorage.removeItem('sm_token');
+        localStorage.removeItem('refresh_token');
         localStorage.removeItem('sm_user');
       } finally {
         setIsLoading(false);
@@ -50,54 +64,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initializeAuth();
   }, []);
 
-  const login = useCallback((newToken: string, newUser: User) => {
-    setToken(newToken);
+  const login = useCallback((accessToken: string, refreshToken: string, newUser: User) => {
+    setToken(accessToken);
+    setRefreshTokenValue(refreshToken);
     setUser(newUser);
-    localStorage.setItem('sm_token', newToken);
+    localStorage.setItem('sm_access_token', accessToken);
+    localStorage.setItem('sm_refresh_token', refreshToken);
     localStorage.setItem('sm_user', JSON.stringify(newUser));
   }, []);
 
   const logout = useCallback(() => {
     setToken(null);
+    setRefreshTokenValue(null);
     setUser(null);
-    localStorage.removeItem('sm_token');
+    localStorage.removeItem('sm_access_token');
+    localStorage.removeItem('sm_refresh_token');
     localStorage.removeItem('sm_user');
   }, []);
 
   const refreshToken = useCallback(async () => {
     try {
-      const savedToken = localStorage.getItem('sm_token');
-      if (!savedToken) {
+      const savedRefresh = localStorage.getItem('sm_refresh_token');
+      if (!savedRefresh) {
         logout();
         return;
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/api/auth/refresh/`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ refresh: savedToken }),
-        credentials: 'include',
-      });
+      const result = await authApi.refreshToken(savedRefresh);
 
-      // Check content type
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        console.error('[AuthContext] Token refresh returned non-JSON response');
-        logout();
-        return;
-      }
-
-      if (response.ok) {
-        const data = await response.json();
-        localStorage.setItem('sm_token', data.access);
-        setToken(data.access);
+      if (result.status === 200 && result.data) {
+        localStorage.setItem('sm_access_token', result.data.access);
+        setToken(result.data.access);
         console.log('[AuthContext] Token refreshed successfully');
       } else {
-        console.warn('[AuthContext] Token refresh failed with status', response.status);
+        console.warn('[AuthContext] Token refresh failed with status', result.status);
         logout();
       }
     } catch (error) {

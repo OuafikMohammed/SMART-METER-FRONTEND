@@ -8,6 +8,8 @@ import PremiumButton from "@/components/ui/PremiumButton";
 import AnimatedInput from "@/components/ui/AnimatedInput";
 import LaserFlow from "@/components/react-bits/LaserFlow/LaserFlow";
 import { Zap, ArrowLeft, Globe, Lock, Shield, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { authApi } from "@/lib/api";
+
 
 export default function SignupPage() {
   const [formData, setFormData] = useState({
@@ -27,15 +29,9 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/register/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+      const result = await authApi.register(formData);
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (result.status >= 200 && result.status < 300) {
         setStatus("success");
         // Redirect to login after a delay
         setTimeout(() => {
@@ -43,9 +39,7 @@ export default function SignupPage() {
         }, 2500);
       } else {
         setStatus("error");
-        // Handle field errors if any
-        const firstError = Object.values(data)[0];
-        setError(Array.isArray(firstError) ? firstError[0] : (data.detail || "Une erreur est survenue lors de l'inscription."));
+        setError(result.error || "Une erreur est survenue lors de l'inscription.");
       }
     } catch (err) {
       setStatus("error");

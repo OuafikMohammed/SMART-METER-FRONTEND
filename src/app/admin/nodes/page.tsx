@@ -12,6 +12,7 @@ interface Foyer {
   address: string;
   consumption: number;
   status: 'active' | 'inactive';
+  residentName: string;
   lastUpdate: string;
 }
 
@@ -30,7 +31,7 @@ export default function NodesPage() {
         setError(null);
 
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${baseUrl}/api/energy/foyers/`, {
+        const response = await fetch(`${baseUrl}/energy/foyers/`, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
@@ -47,8 +48,9 @@ export default function NodesPage() {
           id: f.id,
           name: f.numero_foyer || `Foyer ${f.id}`,
           address: f.adresse || 'N/A',
-          consumption: Math.random() * 50,
+          consumption: f.puissance_souscrite || 0,
           status: f.is_active ? 'active' : 'inactive',
+          residentName: f.resident_name || 'N/A',
           lastUpdate: f.updated_at || new Date().toISOString()
         }));
         setFoyers(foyersList);
@@ -76,10 +78,112 @@ export default function NodesPage() {
     setFilteredFoyers(filtered);
   }, [searchTerm, foyers]);
 
+  const [editingFoyer, setEditingFoyer] = useState<Foyer | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [foyerToDelete, setFoyerToDelete] = useState<number | null>(null);
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [newFoyer, setNewFoyer] = useState({
+    numero_foyer: '',
+    adresse: '',
+    ville: 'Casablanca',
+    code_postal: '20000',
+    puissance_souscrite: 6.0
+  });
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setUpdateLoading(true);
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${baseUrl}/energy/foyers/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(newFoyer),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Erreur lors de la création');
+      }
+
+      const created = await response.json();
+      const mapped = {
+        id: created.id,
+        name: created.numero_foyer,
+        address: created.adresse,
+        consumption: created.puissance_souscrite,
+        status: created.is_active ? 'active' : ('inactive' as 'active' | 'inactive'),
+        residentName: 'N/A',
+        lastUpdate: created.updated_at
+      };
+      
+      setFoyers([mapped, ...foyers]);
+      setIsAddModalOpen(false);
+      setNewFoyer({
+        numero_foyer: '',
+        adresse: '',
+        ville: 'Casablanca',
+        code_postal: '20000',
+        puissance_souscrite: 6.0
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erreur inconnue');
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFoyer) return;
+
+    try {
+      setUpdateLoading(true);
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${baseUrl}/energy/foyers/${editingFoyer.id}/`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          adresse: editingFoyer.address,
+          puissance_souscrite: editingFoyer.consumption,
+          is_active: editingFoyer.status === 'active'
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Erreur lors de la mise à jour');
+      }
+
+      const updated = await response.json();
+      setFoyers(foyers.map(f => f.id === updated.id ? {
+        ...f,
+        address: updated.adresse,
+        consumption: updated.puissance_souscrite,
+        status: updated.is_active ? 'active' : 'inactive'
+      } : f));
+      
+      setIsEditModalOpen(false);
+      setEditingFoyer(null);
+    } catch (err) {
+      console.error('Update error:', err);
+      alert(err instanceof Error ? err.message : 'Erreur inconnue');
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
   const handleDelete = async (id: number) => {
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${baseUrl}/api/energy/foyers/${id}/`, {
+      const response = await fetch(`${baseUrl}/energy/foyers/${id}/`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -93,6 +197,7 @@ export default function NodesPage() {
       }
       
       setFoyers(foyers.filter((f) => f.id !== id));
+      setFoyerToDelete(null);
       setError(null);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Erreur lors de la suppression';
@@ -118,6 +223,7 @@ export default function NodesPage() {
         <motion.button
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
+          onClick={() => setIsAddModalOpen(true)}
           className="flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-cyan text-brand-dark font-bold hover:shadow-lg hover:shadow-brand-cyan/50 transition-all"
         >
           <Plus className="w-4 h-4" />
@@ -136,9 +242,9 @@ export default function NodesPage() {
           <p className="text-3xl font-bold text-emerald-400">{foyers.filter((f) => f.status === 'active').length}</p>
         </GlassCard>
         <GlassCard className="p-6">
-          <p className="text-slate-400 text-sm font-medium mb-2">Consommation Totale</p>
+          <p className="text-slate-400 text-sm font-medium mb-2">Puissance Totale</p>
           <p className="text-3xl font-bold text-brand-cyan">
-            {foyers.reduce((sum, f) => sum + f.consumption, 0)} kWh
+            {foyers.reduce((sum, f) => sum + f.consumption, 0).toFixed(1)} kW
           </p>
         </GlassCard>
       </div>
@@ -201,35 +307,41 @@ export default function NodesPage() {
                             <div className="w-8 h-8 rounded-lg bg-brand-cyan/20 flex items-center justify-center">
                               <MapPin className="w-4 h-4 text-brand-cyan" />
                             </div>
-                            <span className="font-medium text-white">{foyer.numero_foyer || foyer.name}</span>
+                            <span className="font-medium text-white">{foyer.name}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-slate-400 text-sm">{foyer.adresse || foyer.address}</td>
+                        <td className="px-6 py-4 text-slate-400 text-sm">{foyer.address}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <Zap className="w-4 h-4 text-brand-cyan" />
-                            <span className="font-medium text-white">{foyer.puissance_souscrite || foyer.consumption} kW</span>
+                            <span className="font-medium text-white">{foyer.consumption} kW</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-bold ${
-                              (foyer.is_active !== false)
+                              (foyer.status === 'active')
                                 ? 'bg-emerald-500/20 text-emerald-400'
                                 : 'bg-amber-500/20 text-amber-400'
                             }`}
                           >
-                            {(foyer.is_active !== false) ? 'Actif' : 'Inactif'}
+                            {(foyer.status === 'active') ? 'Actif' : 'Inactif'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-slate-400 text-sm">{foyer.resident_name || foyer.lastUpdate || 'N/A'}</td>
+                        <td className="px-6 py-4 text-slate-400 text-sm">{foyer.residentName}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-center gap-2">
-                            <button className="p-2 rounded-lg hover:bg-white/5 transition-colors">
+                            <button 
+                              onClick={() => {
+                                setEditingFoyer(foyer);
+                                setIsEditModalOpen(true);
+                              }}
+                              className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                            >
                               <Edit2 className="w-4 h-4 text-brand-cyan" />
                             </button>
                             <button
-                              onClick={() => handleDelete(foyer.id)}
+                              onClick={() => setFoyerToDelete(foyer.id)}
                               className="p-2 rounded-lg hover:bg-white/5 transition-colors"
                             >
                               <Trash2 className="w-4 h-4 text-red-500" />
@@ -251,6 +363,213 @@ export default function NodesPage() {
           )}
         </GlassCard>
       </motion.div>
+
+      {/* Add Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md"
+          >
+            <GlassCard className="p-8 border border-white/20">
+              <h2 className="text-2xl font-bold text-white mb-6">Ajouter un Foyer</h2>
+              
+              <form onSubmit={handleAdd} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Numéro Foyer (ex: F-100)</label>
+                  <input
+                    type="text"
+                    required
+                    value={newFoyer.numero_foyer}
+                    onChange={(e) => setNewFoyer({ ...newFoyer, numero_foyer: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-brand-cyan"
+                    placeholder="F-XXX"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Adresse</label>
+                  <textarea
+                    required
+                    value={newFoyer.adresse}
+                    onChange={(e) => setNewFoyer({ ...newFoyer, adresse: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-brand-cyan"
+                    rows={2}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Ville</label>
+                    <input
+                      type="text"
+                      value={newFoyer.ville}
+                      onChange={(e) => setNewFoyer({ ...newFoyer, ville: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-brand-cyan"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Code Postal</label>
+                    <input
+                      type="text"
+                      value={newFoyer.code_postal}
+                      onChange={(e) => setNewFoyer({ ...newFoyer, code_postal: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-brand-cyan"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Puissance (kW)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    value={newFoyer.puissance_souscrite}
+                    onChange={(e) => setNewFoyer({ ...newFoyer, puissance_souscrite: parseFloat(e.target.value) })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-brand-cyan"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="flex-1 py-3 rounded-xl bg-white/5 text-white font-bold hover:bg-white/10 transition-all"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updateLoading}
+                    className="flex-1 py-3 rounded-xl bg-brand-cyan text-brand-dark font-bold hover:shadow-lg hover:shadow-brand-cyan/40 transition-all disabled:opacity-50"
+                  >
+                    {updateLoading ? 'Création...' : 'Créer le Foyer'}
+                  </button>
+                </div>
+              </form>
+            </GlassCard>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {isEditModalOpen && editingFoyer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md"
+          >
+            <GlassCard className="p-8 border border-white/20">
+              <h2 className="text-2xl font-bold text-white mb-6">Modifier {editingFoyer.name}</h2>
+              
+              <form onSubmit={handleUpdate} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Adresse</label>
+                  <textarea
+                    value={editingFoyer.address}
+                    onChange={(e) => setEditingFoyer({ ...editingFoyer, address: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-brand-cyan"
+                    rows={3}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Puissance (kW)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={editingFoyer.consumption}
+                    onChange={(e) => setEditingFoyer({ ...editingFoyer, consumption: parseFloat(e.target.value) })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-brand-cyan"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">Statut</label>
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setEditingFoyer({ ...editingFoyer, status: 'active' })}
+                      className={`flex-1 py-2 rounded-xl font-bold transition-all ${
+                        editingFoyer.status === 'active' 
+                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' 
+                        : 'bg-white/5 text-slate-400'
+                      }`}
+                    >
+                      Actif
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingFoyer({ ...editingFoyer, status: 'inactive' })}
+                      className={`flex-1 py-2 rounded-xl font-bold transition-all ${
+                        editingFoyer.status === 'inactive' 
+                        ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30' 
+                        : 'bg-white/5 text-slate-400'
+                      }`}
+                    >
+                      Inactif
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="flex-1 py-3 rounded-xl bg-white/5 text-white font-bold hover:bg-white/10 transition-all"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updateLoading}
+                    className="flex-1 py-3 rounded-xl bg-brand-cyan text-brand-dark font-bold hover:shadow-lg hover:shadow-brand-cyan/40 transition-all disabled:opacity-50"
+                  >
+                    {updateLoading ? 'Enregistrement...' : 'Enregistrer'}
+                  </button>
+                </div>
+              </form>
+            </GlassCard>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {foyerToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-sm"
+          >
+            <GlassCard className="p-8 border border-red-500/20 text-center">
+              <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8 text-red-500" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Supprimer le foyer ?</h2>
+              <p className="text-slate-400 mb-8">Cette action est irréversible. Les données de consommation associées seront également supprimées.</p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setFoyerToDelete(null)}
+                  className="flex-1 py-3 rounded-xl bg-white/5 text-white font-bold hover:bg-white/10 transition-all"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => handleDelete(foyerToDelete)}
+                  className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold hover:shadow-lg hover:shadow-red-500/40 transition-all"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </GlassCard>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

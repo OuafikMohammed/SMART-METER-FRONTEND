@@ -64,7 +64,8 @@ export function useResidentReadings(
 
       if (response.status === 401) {
         setError('Session expirée. Veuillez vous reconnecter.');
-        localStorage.removeItem('sm_token');
+        localStorage.removeItem('sm_access_token');
+        localStorage.removeItem('sm_refresh_token');
         localStorage.removeItem('sm_user');
         return;
       }

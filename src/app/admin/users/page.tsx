@@ -49,7 +49,7 @@ export default function UsersPage() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const token = localStorage.getItem('sm_token');
+        const token = localStorage.getItem('sm_access_token') || localStorage.getItem('sm_token');
         if (!token) {
           toast.error('Session expirée');
           return;

@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, Lock, User as UserIcon, ArrowRight, CheckCircle2, Loader2, Zap } from "lucide-react";
 import PremiumButton from "@/components/ui/PremiumButton";
 import { useAuth } from "@/context/AuthContext";
+import { authApi } from "@/lib/api";
+
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -44,33 +46,25 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = "l
     setStatus("loading");
     setErrorMessage("");
 
-    const endpoint = mode === "login" ? "/api/auth/login/" : "/api/auth/register/";
-    
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(mode === "login" 
-          ? { username: formData.username, password: formData.password }
-          : { 
-              username: formData.username, 
-              email: formData.email, 
-              password: formData.password,
-              first_name: formData.firstName,
-              last_name: formData.lastName
-            }
-        ),
-      });
+      const result = mode === "login" 
+        ? await authApi.login({ username: formData.username, password: formData.password })
+        : await authApi.register({ 
+            username: formData.username, 
+            email: formData.email, 
+            password: formData.password,
+            first_name: formData.firstName,
+            last_name: formData.lastName
+          });
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (result.status >= 200 && result.status < 300 && result.data) {
         if (mode === "login") {
-          login(data.access, data.user);
+          const { access, refresh, user } = result.data;
+          login(access, refresh, user);
           setStatus("success");
           setTimeout(() => {
             onClose();
-          }, 3000);
+          }, 1000);
         } else {
           // After signup, switch to login or auto-login
           setStatus("success");
@@ -81,7 +75,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = "l
         }
       } else {
         setStatus("error");
-        setErrorMessage(data.detail || data.message || "Une erreur est survenue");
+        setErrorMessage(result.error || "Une erreur est survenue");
       }
     } catch (error) {
       setStatus("error");

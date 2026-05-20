@@ -6,6 +6,7 @@ import GlassCard from '@/components/ui/GlassCard';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 import { TrendingUp, TrendingDown, Zap, Clock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 
 interface AnalyticsDataPoint {
   time: string;
@@ -22,10 +23,9 @@ interface TopConsumer {
 
 export default function AnalyticsPage() {
   const { token } = useAuth();
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsDataPoint[]>([]);
+  const { data: adminData, loading, error } = useAdminDashboard();
+  const [analyticsData, setAnalyticsData] = useState<any[]>([]);
   const [topConsumers, setTopConsumers] = useState<TopConsumer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalConsumption: '0 kWh',
     avgPerFoyer: '0 kWh',
@@ -38,73 +38,38 @@ export default function AnalyticsPage() {
   });
 
   useEffect(() => {
-    const fetchAnalytics = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    if (adminData) {
+      // Format consumption data for chart (daily consumption for last 7 days)
+      const formattedConsumption = adminData.daily_consumption.map((item: any) => ({
+        time: new Date(item.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+        consumption: item.value,
+        forecast: item.value * 1.05 // Mock forecast based on real data
+      }));
+      setAnalyticsData(formattedConsumption);
 
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        const headers = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        };
+      // Format top consumers
+      const consumers = adminData.top_consumers.map((c: any, i: number) => ({
+        id: i,
+        name: c.resident,
+        consumption: c.consumption,
+        percentage: (c.consumption / (adminData.top_consumers[0]?.consumption || 1)) * 100
+      }));
+      setTopConsumers(consumers);
 
-        // Fetch consumption data
-        const consumptionRes = await fetch(`${baseUrl}/api/energy/consommations/`, { headers });
-        if (!consumptionRes.ok) throw new Error('Erreur lors du chargement des données de consommation');
-        const consumptionData = await consumptionRes.json();
-        const consResults = consumptionData.results || consumptionData || [];
-        
-        // Format consumption data for chart
-        const formattedConsumption = (Array.isArray(consResults) ? consResults : []).slice(0, 24).map((item: any) => ({
-          time: item.timestamp?.split('T')[1]?.substring(0, 5) || item.timestamp || 'N/A',
-          consumption: item.kwh || 0,
-          forecast: (item.kwh || 0) * 1.1
-        }));
-        setAnalyticsData(formattedConsumption);
-
-        // Fetch foyers for top consumers
-        const foyersRes = await fetch(`${baseUrl}/api/energy/foyers/`, { headers });
-        if (!foyersRes.ok) throw new Error('Erreur lors du chargement des foyers');
-        const foyersData = await foyersRes.json();
-        const foyers = Array.isArray(foyersData.results) ? foyersData.results : (Array.isArray(foyersData) ? foyersData : []);
-        setTopConsumers(foyers.slice(0, 5).map((f: any) => ({
-          id: f.id,
-          name: f.numero_foyer,
-          consumption: Math.random() * 100,
-          percentage: Math.random() * 100
-        })));
-
-        // Fetch stats from anomalies
-        const anomaliesRes = await fetch(`${baseUrl}/api/energy/anomalies/`, { headers });
-        if (!anomaliesRes.ok) throw new Error('Erreur lors du chargement des statistiques');
-        const anomaliesData = await anomaliesRes.json();
-        const anomalies = Array.isArray(anomaliesData.results) ? anomaliesData.results : (Array.isArray(anomaliesData) ? anomaliesData : []);
-        
-        const totalConsumption = formattedConsumption.reduce((sum: number, d: any) => sum + (d.consumption || 0), 0);
-        setStats({
-          totalConsumption: `${totalConsumption.toFixed(2)} kWh`,
-          avgPerFoyer: `${(totalConsumption / 6).toFixed(2)} kWh`,
-          peakLoad: `${Math.max(...formattedConsumption.map((d: any) => d.consumption || 0)).toFixed(2)} kW`,
-          savings: `${(anomalies.length * 2.5).toFixed(1)}%`,
-          consumptionTrend: '+5%',
-          avgTrend: '+3%',
-          peakTrend: '+8%',
-          savingsTrend: '+12%',
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Erreur inconnue';
-        setError(message);
-        console.error('Erreur fetch analytics:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (token) {
-      fetchAnalytics();
+      // Update stats
+      const peak = Math.max(...adminData.daily_consumption.map((d: any) => d.value), 0);
+      setStats({
+        totalConsumption: `${adminData.total_consumption.toLocaleString()} kWh`,
+        avgPerFoyer: `${(adminData.total_consumption / (adminData.foyers_count || 1)).toFixed(1)} kWh`,
+        peakLoad: `${peak.toFixed(1)} kWh`,
+        savings: `${adminData.efficiency}%`,
+        consumptionTrend: adminData.efficiency >= 0 ? `+${adminData.efficiency}%` : `${adminData.efficiency}%`,
+        avgTrend: '+2%',
+        peakTrend: '+5%',
+        savingsTrend: '+10%',
+      });
     }
-  }, [token]);
+  }, [adminData]);
   return (
     <div className="space-y-8">
       {/* Header */}

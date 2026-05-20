@@ -6,6 +6,16 @@ import { useAuth } from "@/context/AuthContext";
 import { useDashboard } from "@/hooks/useDashboard";
 import GlassCard from "@/components/ui/GlassCard";
 import { Zap, TrendingUp, AlertTriangle, Cpu, Loader } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
 
 interface StatCard {
   label: string;
@@ -133,75 +143,120 @@ export default function ResidentDashboard() {
       {/* Graphique et Conseil */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Graphique de consommation */}
-        <GlassCard className="lg:col-span-2 p-8 min-h-[400px]">
-          <h3 className="text-xl font-bold text-white mb-6">Consommation Dernières 48h</h3>
-
-          {loading ? (
-            <div className="h-[300px] flex items-center justify-center">
-              <Loader size={24} className="text-brand-cyan animate-spin" />
+        <GlassCard className="lg:col-span-2 p-8 min-h-[400px] flex flex-col">
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h3 className="text-xl font-bold text-white tracking-tight">Consommation Dernières 48h</h3>
+              <p className="text-slate-500 text-xs mt-1">Données actualisées en temps réel</p>
             </div>
-          ) : graphPoints.length > 0 ? (
-            <div className="h-[300px] flex items-end justify-between gap-1 relative">
-              {/* Ligne de référence */}
-              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-                <div className="border-t border-white/10 w-full"></div>
-                <div className="border-t border-white/10 w-full"></div>
-                <div className="border-t border-white/10 w-full"></div>
+            <div className="flex gap-4 text-[10px] font-bold uppercase tracking-wider">
+              <div className="flex items-center gap-1.5 bg-brand-cyan/10 px-2 py-1 rounded-md border border-brand-cyan/20">
+                <div className="w-2 h-2 rounded-full bg-brand-cyan shadow-[0_0_8px_rgba(6,182,212,0.5)]"></div>
+                <span className="text-brand-cyan">Normale</span>
               </div>
+              <div className="flex items-center gap-1.5 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20">
+                <div className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]"></div>
+                <span className="text-amber-400">Anomalie</span>
+              </div>
+            </div>
+          </div>
 
-              {/* Points */}
-              {graphPoints.map((point, idx) => {
-                const normalizedHeight = rangeKwh > 0 ? ((point.kwh - minKwh) / rangeKwh) * 100 : 50;
-                const isAnomaly = point.anomaly_label !== 0;
-
-                return (
-                  <motion.div
-                    key={idx}
-                    initial={{ height: 0 }}
-                    animate={{ height: `${Math.max(5, normalizedHeight)}%` }}
-                    transition={{ delay: idx * 0.02 }}
-                    className="flex-1 group relative"
+          <div className="flex-1 min-h-[300px] w-full">
+            {loading ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader size={24} className="text-brand-cyan animate-spin" />
+              </div>
+            ) : graphPoints.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={graphPoints} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <XAxis 
+                    dataKey="timestamp" 
+                    tickFormatter={(time) => {
+                      const date = new Date(time);
+                      if (date.getHours() === 0 && date.getMinutes() === 0) {
+                        return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+                      }
+                      return date.getHours() % 6 === 0 ? `${date.getHours()}h` : '';
+                    }}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 500 }}
+                    minTickGap={20}
+                  />
+                  <YAxis 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#64748b', fontSize: 10 }}
+                  />
+                  <Tooltip 
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        const isAnomaly = data.anomaly_label !== 0;
+                        return (
+                          <div className="bg-slate-900/90 backdrop-blur-md border border-white/10 p-3 rounded-xl shadow-2xl">
+                            <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">
+                              {new Date(data.timestamp).toLocaleString('fr-FR', { 
+                                day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' 
+                              })}
+                            </p>
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-white text-lg font-black">{data.kwh.toFixed(2)}</span>
+                              <span className="text-slate-500 text-xs font-bold">kWh</span>
+                            </div>
+                            {isAnomaly && (
+                              <div className="mt-2 flex items-center gap-1.5 text-amber-400 text-[10px] font-bold py-1 px-2 bg-amber-400/10 rounded-lg border border-amber-400/20">
+                                <AlertTriangle size={10} />
+                                ANOMALIE DÉTECTÉE
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                    cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }}
+                  />
+                  <Bar 
+                    dataKey="kwh" 
+                    radius={[4, 4, 0, 0]}
+                    barSize={Math.max(4, 400 / graphPoints.length)}
                   >
-                    <div
-                      className={`w-full h-full rounded-t transition-all ${
-                        isAnomaly
-                          ? 'bg-gradient-to-t from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300'
-                          : 'bg-gradient-to-t from-brand-cyan to-brand-cyan/60 hover:from-brand-cyan hover:to-brand-cyan'
-                      } opacity-80 hover:opacity-100`}
-                    />
-                    {/* Tooltip */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10">
-                      <div className="bg-slate-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap border border-white/20">
-                        <div>{point.kwh.toFixed(2)} kWh</div>
-                        <div className="text-slate-400">{formatTime(point.timestamp)}</div>
-                        {isAnomaly && <div className="text-amber-400">⚠️ Anomalie</div>}
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="h-[300px] flex items-center justify-center text-slate-600">
-              Pas de données de consommation disponibles
-            </div>
-          )}
+                    {graphPoints.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={entry.anomaly_label !== 0 ? '#fbbf24' : '#06b6d4'} 
+                        fillOpacity={0.8}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-600 italic">
+                Pas de données de consommation disponibles
+              </div>
+            )}
+          </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-4 text-center text-xs">
-            <div>
-              <p className="text-slate-500">Jour</p>
-              <p className="text-white font-bold">{dashboardData?.consommation_jour.toFixed(1) || '--'} kWh</p>
+          <div className="mt-8 pt-6 border-t border-white/5 grid grid-cols-3 gap-4 text-center">
+            <div className="space-y-1">
+              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Aujourd'hui</p>
+              <p className="text-white text-lg font-black">{dashboardData?.consommation_jour.toFixed(1) || '--'} <span className="text-[10px] font-medium text-slate-500">kWh</span></p>
             </div>
-            <div>
-              <p className="text-slate-500">Semaine</p>
-              <p className="text-white font-bold">{dashboardData?.consommation_semaine.toFixed(1) || '--'} kWh</p>
+            <div className="space-y-1">
+              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">7 Derniers Jours</p>
+              <p className="text-white text-lg font-black">{dashboardData?.consommation_semaine.toFixed(1) || '--'} <span className="text-[10px] font-medium text-slate-500">kWh</span></p>
             </div>
-            <div>
-              <p className="text-slate-500">Variation</p>
-              <p className={`font-bold ${dashboardData?.variation_jour && dashboardData.variation_jour > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                {dashboardData?.variation_jour && dashboardData.variation_jour > 0 ? '+' : ''}
-                {dashboardData?.variation_jour.toFixed(1) || '--'}%
-              </p>
+            <div className="space-y-1 border-l border-white/5">
+              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Variation</p>
+              <div className="flex items-center justify-center gap-1">
+                <p className={`text-lg font-black ${dashboardData?.variation_jour && dashboardData.variation_jour > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {dashboardData?.variation_jour && dashboardData.variation_jour > 0 ? '+' : ''}
+                  {dashboardData?.variation_jour.toFixed(1) || '--'}%
+                </p>
+              </div>
             </div>
           </div>
         </GlassCard>
@@ -216,9 +271,9 @@ export default function ResidentDashboard() {
             {dashboardData ? (
               <>
                 <p className="text-slate-300 text-sm leading-relaxed">
-                  {dashboardData.alertes_actives > 0
+                  {dashboardData.conseil_ia || (dashboardData.alertes_actives > 0
                     ? `⚠️ Vous avez ${dashboardData.alertes_actives} alerte${dashboardData.alertes_actives > 1 ? 's' : ''} active${dashboardData.alertes_actives > 1 ? 's' : ''}. Consultez-les pour optimiser votre consommation.`
-                    : `✨ Votre consommation de pointe se situe entre 19h et 21h. Essayez de décaler l'utilisation de votre lave-linge après 22h pour réduire votre facture de 15%.`}
+                    : `✨ Votre consommation de pointe se situe entre 19h et 21h. Essayez de décaler l'utilisation de votre lave-linge après 22h pour réduire votre facture de 15%.`)}
                 </p>
                 <div className="pt-4">
                   <button

@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import GlassCard from "@/components/ui/GlassCard";
 import { Calendar, Download, TrendingUp, Clock, AlertCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { residentApi } from "@/lib/api";
 
 interface HistoryItem {
   date: string;
@@ -29,6 +30,7 @@ export default function ConsumptionHistory() {
     month: { avg: 0, total: 0, peak: "", saving: "0%" },
     year: { avg: 0, total: 0, peak: "", saving: "0%" },
   });
+  const [historyDataResAi, setHistoryDataResAi] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,39 +40,43 @@ export default function ConsumptionHistory() {
         setLoading(true);
         setError(null);
 
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        const headers = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        };
+        if (!token) return;
 
-        // Fetch history data
-        const historyRes = await fetch(`${baseUrl}/api/energy/consommations/`, {
-          headers,
-        });
+        const { data: historyDataRes, error: apiError } = await residentApi.getHistory(token, selectedPeriod as any);
 
-        if (!historyRes.ok) throw new Error('Erreur lors du chargement de l\'historique');
-        const historyDataRes = await historyRes.json();
-        const results = historyDataRes.results || historyDataRes;
-        setHistoryData(Array.isArray(results) ? results : []);
-
-        // Calculate period stats from history data
-        const historyArray = Array.isArray(results) ? results : [];
-        const avgConsumption = historyArray.length > 0 
-          ? historyArray.reduce((sum: number, item: any) => sum + (item.kwh || 0), 0) / historyArray.length 
-          : 0;
-        const maxConsumption = historyArray.length > 0
-          ? Math.max(...historyArray.map((item: any) => item.kwh || 0))
-          : 0;
+        if (apiError || !historyDataRes) {
+          throw new Error(apiError || "Erreur lors du chargement de l'historique");
+        }
         
+        // Map the results to the format expected by the table
+        const results = historyDataRes.results || [];
+        const formattedData = results.map((item: any) => ({
+          date: new Date(item.timestamp).toLocaleDateString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          consumption: item.kwh,
+          cost: (item.kwh * 2.5).toFixed(2), // 2.5 DH/kWh
+          peak: item.anomaly_label !== "0" && item.anomaly_label ? "Oui" : "Non"
+        }));
+        
+        setHistoryData(formattedData);
+        setHistoryDataResAi(historyDataRes);
+
+        // Update period stats from API response
         setPeriodStats(prev => ({
           ...prev,
           [selectedPeriod]: {
-            avgConsumption: avgConsumption.toFixed(2),
-            maxConsumption: maxConsumption.toFixed(2),
-            totalConsumption: historyArray.reduce((sum: number, item: any) => sum + (item.kwh || 0), 0).toFixed(2)
+            avg: historyDataRes.avg_kwh || 0,
+            total: historyDataRes.total_kwh || 0,
+            peak: historyDataRes.ai_analysis?.peak_hours || "19:00 - 21:00",
+            saving: historyDataRes.ai_analysis?.saving_potential || "5%"
           }
         }));
+
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Erreur inconnue';
         setError(message);
@@ -114,6 +120,34 @@ export default function ConsumptionHistory() {
           </motion.button>
         ))}
       </div>
+
+      {/* AI Analysis */}
+      {historyDataResAi?.ai_analysis && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <GlassCard className="p-6 border-brand-cyan/20 bg-brand-cyan/5">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <TrendingUp size={20} className="text-brand-cyan" />
+              Analyse IA de la période
+            </h3>
+            <p className="text-slate-300 text-sm leading-relaxed mb-4">
+              {historyDataResAi.ai_analysis.ai_summary}
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Heures de Pointe (IA)</p>
+                <p className="text-brand-cyan font-bold">{historyDataResAi.ai_analysis.peak_hours}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Potentiel d'Économie</p>
+                <p className="text-emerald-400 font-bold">{historyDataResAi.ai_analysis.saving_potential}</p>
+              </div>
+            </div>
+          </GlassCard>
+        </motion.div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
